@@ -1,0 +1,9 @@
+module switch_interface (
+    input wire [15:0] switches, // Connected to FPGA Switch pins
+    output reg [31:0] read_data
+);
+
+    always @(*) begin
+        // Zero-extend 16-bit switches to 32 bits for the CPU bus
+        read_data = {16'h0000, switches};
+    end

@@ -1,0 +1,70 @@
+module mem_system_top (
+    input wire clk,
+    input wire rst,
+    input wire [9:0] address,
+    input wire MemWrite,
+    input wire MemRead,
+    input wire [31:0] write_data,
+    input wire [15:0] switches,
+    output wire [31:0] read_data,
+    output wire [15:0] leds
+);
+
+    // Internal wires for module interconnects
+    wire DataMemSelect, LEDSelect, SwitchSelect;
+    wire DataMemWrite, DataMemRead, LEDWrite, SwitchReadEnable;
+    
+    wire [31:0] dm_read_data;
+    wire [31:0] switch_read_data;
+    
+    // Reg declaration required for assignment inside always block
+    reg [31:0] cpu_read_data;
+    assign read_data = cpu_read_data;
+
+    // 1. Instantiate Address Decoder 
+    // (Ensure the module name matches the 'module' declaration inside your lab8.v file)
+    address_decoder decoder (
+        .address(address),
+        .MemRead(MemRead),
+        .DataMemSelect(DataMemSelect),
+        .LEDSelect(LEDSelect),
+        .SwitchSelect(SwitchSelect),
+        .DataMemWrite(DataMemWrite),
+        .DataMemRead(DataMemRead),
+        .LEDWrite(LEDWrite),
+        .SwitchReadEnable(SwitchReadEnable)
+    );
+
+    // 2. Instantiate Data Memory
+    data_memory dmem (
+        .clk(clk),
+        .we(DataMemWrite),
+        .re(DataMemRead),
+        .address(address[8:0]), // lower 9 bits for 512 locations
+        .write_data(write_data),
+        .read_data(dm_read_data)
+    );
+
+    // 3. Instantiate LED Interface
+    led_interface led_inst (
+        .clk(clk),
+        .rst(rst),
+        .we(LEDWrite),
+        .write_data(write_data),
+        .leds(leds)
+    );
+
+    // 4. Instantiate Switch Interface
+    switch_interface switch_inst (
+        .switches(switches),
+        .read_data(switch_read_data)
+    );
+
+    // 5. Read Data Multiplexer
+    always @(*) begin
+        case (1'b1)
+            DataMemSelect: cpu_read_data = dm_read_data;
+            SwitchSelect:  cpu_read_data = switch_read_data;
+            default:       cpu_read_data = 32'h00000000;
+        endcase
+    end

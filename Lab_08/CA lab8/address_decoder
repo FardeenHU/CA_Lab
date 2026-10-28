@@ -1,0 +1,43 @@
+module address_decoder (
+    input wire [9:0] address,
+    input wire MemWrite,
+    input wire MemRead,
+    output reg DataMemSelect,
+    output reg LEDSelect,
+    output reg SwitchSelect,
+    output reg DataMemWrite,
+    output reg DataMemRead,
+    output reg LEDWrite,
+    output reg SwitchReadEnable
+);
+
+    always @(*) begin
+        // Default signal states to prevent latches
+        DataMemSelect    = 1'b0;
+        LEDSelect        = 1'b0;
+        SwitchSelect     = 1'b0;
+        DataMemWrite     = 1'b0;
+        DataMemRead      = 1'b0;
+        LEDWrite         = 1'b0;
+        SwitchReadEnable = 1'b0;
+
+        // Decode based on address bits
+        if (address[9] == 1'b0) begin 
+            // Data Memory range: 0 to 511 (address[9] = 0)
+            DataMemSelect = 1'b1;
+            DataMemWrite  = MemWrite;
+            DataMemRead   = MemRead;
+        end 
+        else if (address[9:8] == 2'b10) begin 
+            // LED Interface range: 512 to 767 (0x200 to 0x2FF)
+            LEDSelect     = 1'b1;
+            LEDWrite      = MemWrite;
+        end 
+        else if (address[9:8] == 2'b11) begin 
+            // Switch Interface range: 768 to 1023 (0x300 to 0x3FF)
+            SwitchSelect     = 1'b1;
+            SwitchReadEnable = MemRead;
+        end
+    end
+endmodule
+

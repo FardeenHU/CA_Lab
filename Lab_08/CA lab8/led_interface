@@ -1,0 +1,189 @@
+module led_interface (
+    input wire clk,
+    input wire rst,
+    input wire we,              // LEDWrite signal from decoder
+    input wire [31:0] write_data,
+    output reg [15:0] leds      // Connected to FPGA LED pins
+);
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            leds <= 16'h0000;
+        end else if (we) begin
+            leds <= write_data[15:0]; // Map lower 16 bits to physical LEDs
+        end
+    end
+
+endmodule
+module switch_interface (
+    input wire [15:0] switches, // Connected to FPGA Switch pins
+    output reg [31:0] read_data
+);
+
+    always @(*) begin
+        // Zero-extend 16-bit switches to 32 bits for the CPU bus
+        read_data = {16'h0000, switches};
+    end
+
+endmodule
+module mem_system_top (
+    input wire clk,
+    input wire rst,
+    input wire [9:0] address,
+    input wire MemWrite,
+    input wire MemRead,
+    input wire [31:0] write_data,
+    input wire [15:0] switches,
+    output wire [31:0] read_data,
+    output wire [15:0] leds
+);
+
+    // Internal wires for module interconnects
+    wire DataMemSelect, LEDSelect, SwitchSelect;
+    wire DataMemWrite, DataMemRead, LEDWrite, SwitchReadEnable;
+    
+    wire [31:0] dm_read_data;
+    wire [31:0] switch_read_data;
+    
+    // Reg declaration required for assignment inside always block
+    reg [31:0] cpu_read_data;
+    assign read_data = cpu_read_data;
+
+    // 1. Instantiate Address Decoder 
+    // (Ensure the module name matches the 'module' declaration inside your lab8.v file)
+    address_decoder decoder (
+        .address(address),
+        .MemWrite(MemWrite),
+        .MemRead(MemRead),
+        .DataMemSelect(DataMemSelect),
+        .LEDSelect(LEDSelect),
+        .SwitchSelect(SwitchSelect),
+        .DataMemWrite(DataMemWrite),
+        .DataMemRead(DataMemRead),
+        .LEDWrite(LEDWrite),
+        .SwitchReadEnable(SwitchReadEnable)
+    );
+
+    // 2. Instantiate Data Memory
+    data_memory dmem (
+        .clk(clk),
+        .we(DataMemWrite),
+        .re(DataMemRead),
+        .address(address[8:0]), // lower 9 bits for 512 locations
+        .write_data(write_data),
+        .read_data(dm_read_data)
+    );
+
+    // 3. Instantiate LED Interface
+    led_interface led_inst (
+        .clk(clk),
+        .rst(rst),
+        .we(LEDWrite),
+        .write_data(write_data),
+        .leds(leds)
+    );
+
+    // 4. Instantiate Switch Interface
+    switch_interface switch_inst (
+        .switches(switches),
+        .read_data(switch_read_data)
+    );
+
+    // 5. Read Data Multiplexer
+    always @(*) begin
+        case (1'b1)
+            DataMemSelect: cpu_read_data = dm_read_data;
+            SwitchSelect:  cpu_read_data = switch_read_data;
+            default:       cpu_read_data = 32'h00000000;
+        endcase
+    end
+
+endmodule
+module data_memory (
+    input wire clk,
+    input wire we,              // DataMemWrite enable signal
+    input wire re,              // DataMemRead enable signal
+    input wire [8:0] address,   // 9 bits to index 512 locations (address[8:0])
+    input wire [31:0] write_data,
+    output reg [31:0] read_data
+);
+
+    // Declare 512 x 32 memory array
+    reg [31:0] mem [511:0];
+
+    // Synchronous Write Operation
+    always @(posedge clk) begin
+        if (we) begin
+            mem[address] <= write_data;
+        end
+    end
+
+    // Asynchronous Read Operation
+    always @(*) begin
+        if (re)
+            read_data = mem[address];
+        else
+            read_data = 32'h00000000;
+    end
+
+endmodule
+module address_decoder (
+    input wire [9:0] address,
+    input wire MemWrite,
+    input wire MemRead,
+    output reg DataMemSelect,
+    output reg LEDSelect,
+    output reg SwitchSelect,
+    output reg DataMemWrite,
+    output reg DataMemRead,
+    output reg LEDWrite,
+    output reg SwitchReadEnable
+);
+
+    always @(*) begin
+        // Default signal states to prevent latches
+        DataMemSelect    = 1'b0;
+        LEDSelect        = 1'b0;
+        SwitchSelect     = 1'b0;
+        DataMemWrite     = 1'b0;
+        DataMemRead      = 1'b0;
+        LEDWrite         = 1'b0;
+        SwitchReadEnable = 1'b0;
+
+        // Decode based on address bits
+        if (address[9] == 1'b0) begin 
+            // Data Memory range: 0 to 511 (address[9] = 0)
+            DataMemSelect = 1'b1;
+            DataMemWrite  = MemWrite;
+            DataMemRead   = MemRead;
+        end 
+        else if (address[9:8] == 2'b10) begin 
+            // LED Interface range: 512 to 767 (0x200 to 0x2FF)
+            LEDSelect     = 1'b1;
+            LEDWrite      = MemWrite;
+        end 
+        else if (address[9:8] == 2'b11) begin 
+            // Switch Interface range: 768 to 1023 (0x300 to 0x3FF)
+            SwitchSelect     = 1'b1;
+            SwitchReadEnable = MemRead;
+        end
+    end
+endmodule
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
